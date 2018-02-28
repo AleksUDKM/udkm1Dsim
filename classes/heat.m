@@ -19,6 +19,9 @@ classdef heat < simulation
                                     % of different materials in the heat diffusion simulation
         distances       = [];       % FLOAT vector of distances where to calc heat diffusion. If not set
                                     % heat diffusion is calculated at each unit cell location 
+        dAlphadz        = [];       % FLOAT vector of the calculated absorption profile. If not set 
+                                    % the absorption profile is calculated
+                                    % using Lambert-Beer laws                                                                    
         odeOptions      = struct(); % struct with options for the pdepe solver, see odeset, used for heat diffusion.
         boundaryConditions = struct(...
             'leftType'  , 1 ,...    % STRUCT of the left and right type of the boundary conditions for the
@@ -278,43 +281,48 @@ classdef heat < simulation
         % $$ \frac{d \alpha(z)}{dz} = \frac{1}{\zeta} \exp(-z/\zeta) $$
         % 
         function dAlphadz = getAbsorptionProfile(obj,dists)
-            if nargin < 2
-                % if no distances are set, we calculate the Extinction on
-                % the middle of each unit cell
-                [dStart, ~, dists] = obj.S.getDistancesOfUnitCells();
+            if ~isempty(obj.dAlphadz)
+                dAlphadz = obj.dAlphadz;
             else
-                dStart = obj.S.getDistancesOfUnitCells();
-            end
-            
-            dInterfaces = obj.S.getDistancesOfInterfaces(); % the interfaces
-            N           = length(dists); % nb of distances         
-            
-            dAlphadz = zeros(N,1); % initialize relative absorbed energies
-            I0 = 1; % initial intensity
-            k  = 1; % counter for first unit cell in layer
-            for i = 2:length(dInterfaces)
-                % find the first unitCell of the layer and get properties
-                index = finderb(dInterfaces(i-1),dStart);
-                UC = obj.S.getUnitCellHandle(index);
-                optPenDepth = UC.optPenDepth;
-                
-                % get all distances in the current layer we have to
-                % calculate the absorption profile for
-                if i == length(dInterfaces) % last layer
-                   z = dists(dists >= dInterfaces(i-1) & dists <= dInterfaces(i));
+                if nargin < 2
+                    % if no distances are set, we calculate the Extinction on
+                    % the middle of each unit cell
+                    [dStart, ~, dists] = obj.S.getDistancesOfUnitCells();
                 else
-                   z = dists(dists >= dInterfaces(i-1) & dists < dInterfaces(i)); 
+                    dStart = obj.S.getDistancesOfUnitCells();
                 end
+
+                dInterfaces = obj.S.getDistancesOfInterfaces(); % the interfaces
+                N           = length(dists); % nb of distances         
+
+                dAlphadz = zeros(N,1); % initialize relative absorbed energies
+                I0 = 1; % initial intensity
+                k  = 1; % counter for first unit cell in layer
+                for i = 2:length(dInterfaces)
+                    % find the first unitCell of the layer and get properties
+                    index = finderb(dInterfaces(i-1),dStart);
+                    UC = obj.S.getUnitCellHandle(index);
+                    optPenDepth = UC.optPenDepth;
+
+                    % get all distances in the current layer we have to
+                    % calculate the absorption profile for
+                    if i == length(dInterfaces) % last layer
+                       z = dists(dists >= dInterfaces(i-1) & dists <= dInterfaces(i));
+                    else
+                       z = dists(dists >= dInterfaces(i-1) & dists < dInterfaces(i)); 
+                    end
+
+                    m = length(z)-1;
+                    if ~isinf(optPenDepth)
+                        % the layer is absorbing
+                        dAlphadz(k:k+m) = I0/optPenDepth*exp(-(z-dInterfaces(i-1))/optPenDepth);                
+                        % calculate the remaining intensity for the next layer
+                        I0 = I0*exp(-(dInterfaces(i)-dInterfaces(i-1))/optPenDepth);
+                    end                    
+                    k = k+m+1; % set the counter
+                end%for
+            end%if
                 
-                m = length(z)-1;
-                if ~isinf(optPenDepth)
-                    % the layer is absorbing
-                    dAlphadz(k:k+m) = I0/optPenDepth*exp(-(z-dInterfaces(i-1))/optPenDepth);                
-                    % calculate the remaining intensity for the next layer
-                    I0 = I0*exp(-(dInterfaces(i)-dInterfaces(i-1))/optPenDepth);
-                end                    
-                k = k+m+1; % set the counter
-            end
         end%function
         
         %% getTemperatureAfterDeltaExcitation
@@ -345,7 +353,7 @@ classdef heat < simulation
         %     \frac{d\alpha}{dz} \, E_0 \, \Delta z \, \right|  
         %     \stackrel{!}{=} 0 $$
         %
-        function [finalTemp deltaT] = getTemperatureAfterDeltaExcitation(obj,fluence,initTemp)
+        function [finalTemp, deltaT] = getTemperatureAfterDeltaExcitation(obj,fluence,initTemp)
             % initialize
             tic
             N = obj.S.getNumberOfUnitCells; % nb of unit cells
