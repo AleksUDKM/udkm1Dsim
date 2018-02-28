@@ -321,6 +321,7 @@ classdef heat < simulation
                     end                    
                     k = k+m+1; % set the counter
                 end%for
+                obj.dAlphadz = dAlphadz;
             end%if
                 
         end%function
