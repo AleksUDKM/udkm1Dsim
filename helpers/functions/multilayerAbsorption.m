@@ -7,7 +7,7 @@ function [ zs,Ints,dAs,dTs,Rtotal,Ttotal ] = multilayerAbsorption(layers, incide
 %            usually the substrate. For each layer, i.e. row, the complex index
 %            of refraction n+jk, the density [g.cm-3], the heat capacity
 %            [J.kg-1.K-1] and the thickness [m] are given in that order.
-%        incidence: the angle of incidence, in degree.
+%        incidence: the angle of incidence, in radians.
 %        wavelength: the vacuum wavelength [m].
 %        steps: the number of data points for the calculation of the intensity,
 %            absorption, temperature increase profiles for each layer. If steps
